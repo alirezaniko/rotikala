@@ -1,7 +1,7 @@
 from django.db import models
 from users.models import UserAddress  # , CustomUser as User
 from django_jalali.db import models as jmodels
-from products.models import Product
+from products.models import Product, Coupon
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
@@ -20,6 +20,13 @@ class Order(models.Model):
     returned = models.BooleanField(default=False, blank=True, verbose_name='مرجوعی')
     Cancellation = models.BooleanField(default=False, blank=True, verbose_name='لغو شده')
     shipping_cost = models.PositiveIntegerField(default=100000)
+    coupon = models.ForeignKey(Coupon, null=True, blank=True, on_delete=models.SET_NULL)
+
+    def apply_discount(self):
+        if self.coupon and self.coupon.is_valid():
+            discount_amount = (self.total_price * self.coupon.discount_percentage) / 100
+            return self.total_price - discount_amount
+        return self.total_price
 
     def __str__(self):
         return self.user.username
@@ -38,4 +45,3 @@ class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
-

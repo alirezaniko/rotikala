@@ -172,3 +172,18 @@ class SearchHistory(models.Model):
 
     def __str__(self):
         return f"{self.term} searched by {self.user}"
+
+
+class Coupon(models.Model):
+    code = models.CharField(max_length=50,unique=True, verbose_name='کد تخفیف')
+    discount_percentage = models.DecimalField(max_digits=5,decimal_places=2)
+    valid_until = models.DateTimeField()
+    max_usage = models.PositiveIntegerField(default=1)
+    used_count = models.PositiveIntegerField(default=0)
+
+    def is_valid(self):
+        from django.utils import timezone
+        return self.used_count < self.max_usage and self.valid_until > timezone.now()
+
+    def __str__(self):
+        return self.code
