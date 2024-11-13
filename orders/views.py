@@ -1,12 +1,14 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions, mixins
 from rest_framework.response import Response
+from rest_framework.request import Request
 from .models import Cart, CartItem, Order
-from .serializers import CartSerializer, CartItemSerializer
+from .serializers import CartSerializer, CartItemSerializer, ApplyCouponSerializer, CouponSerializer
 from api.mixins import StandardResponseMixin
 from rest_framework.permissions import IsAuthenticated
 from products.models import Product, Coupon
 from rest_framework.views import APIView
 from django.utils import timezone
+
 
 class AddToCartView(StandardResponseMixin, generics.GenericAPIView):
     serializer_class = CartItemSerializer
@@ -88,26 +90,47 @@ class CartDetailView(StandardResponseMixin, generics.RetrieveAPIView):
         return self.success_response(data=serializer.data, user=request.user)
 
 
-class ApplyCouponView(StandardResponseMixin,APIView):
+class ApplyCouponView(StandardResponseMixin, APIView):
     def post(self, request, order_id):
-        coupon_code = request.data.get('code')
-        try:
-            order = Order.objects.get(id=order_id, user=request.user)
-            coupon = Coupon.objects.get(code=coupon_code)
-            if coupon.is_valid():
-                order.coupon = coupon
-                order.total_price = order.apply_discount()
-                order.save()
-                coupon.used_count += 1
-                coupon.save()
-                return self.success_response(data=order.total_price,user=request.user)
+        serializer = ApplyCouponSerializer(data=request.data)
+        if serializer.is_valid():
+            coupon_code = serializer.validated_data['code']
+            try:
+                order = Order.objects.get(id=order_id, user=request.user)
+                coupon = Coupon.objects.get(code=coupon_code)
 
-            elif coupon.valid_until < timezone.now():
-                return self.error_response(errors=['مدت زمان استفاده از کوپن گذشته است'])
-            else:
-                return self.error_response(errors=['کوپن نامعتر است '])
-        except Order.DoesNotExist:
-            return self.error_response(errors=['سفارشی با این آی دی وجود ندارد'])
-        except Coupon.DoesNotExist:
-            return self.error_response(errors=[' کوپن وجود ندارد'])
+                if coupon.is_valid():
+                    order.coupon = coupon
+                    order.total_price = order.apply_discount()
+                    order.save()
+
+                    coupon.used_count += 1
+                    coupon.save()
+
+                    return self.success_response(data=order.total_price, user=request.user)
+                else:
+                    return self.error_response(errors="کوپن وجود ندارد یا منقضی شده است",
+                                               status_code=status.HTTP_400_BAD_REQUEST)
+            except Order.DoesNotExist:
+                return self.error_response(errors="سفارش وجود ندارد", status_code=status.HTTP_404_NOT_FOUND)
+            except Coupon.DoesNotExist:
+                return self.error_response(errors="کوپن وجود ندارد", status_code=status.HTTP_404_NOT_FOUND)
+
+        return self.error_response(errors=['کوپن مد نظر وجود ندارد'], status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class CouponCreateView(StandardResponseMixin, generics.CreateAPIView):
+    queryset = Coupon.objects.all()
+    serializer_class = CouponSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return self.success_response(data=serializer.data, user=request.user)
+        errors = serializer.errors.get('non_field_errors', serializer.errors)
+        if isinstance(errors, dict):
+            errors = sum(errors.values(), [])
+        return self.error_response(errors=errors)
 

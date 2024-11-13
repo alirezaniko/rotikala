@@ -177,13 +177,14 @@ class SearchHistory(models.Model):
 class Coupon(models.Model):
     code = models.CharField(max_length=50,unique=True, verbose_name='کد تخفیف')
     discount_percentage = models.DecimalField(max_digits=5,decimal_places=2)
-    valid_until = models.DateTimeField()
+    valid_from = models.DateTimeField()
+    valid_to = models.DateTimeField()
     max_usage = models.PositiveIntegerField(default=1)
     used_count = models.PositiveIntegerField(default=0)
 
+
     def is_valid(self):
-        from django.utils import timezone
-        return self.used_count < self.max_usage and self.valid_until > timezone.now()
+        return self.used_count < self.max_usage and self.valid_to > self.valid_from
 
     def __str__(self):
         return self.code
